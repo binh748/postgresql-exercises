@@ -20,7 +20,7 @@ SELECT *
 
  -- 4. Control which rows are retrieved - part 2
 
- SELECT facid, name, membercost, monthlymaintenance
+SELECT facid, name, membercost, monthlymaintenance
   FROM cd.facilities
  WHERE membercost > 0
    AND membercost < monthlymaintenance * 1/50;
@@ -33,9 +33,9 @@ SELECT *
 
  -- 6. Matching against multiple possible values
 
- SELECT *
-   FROM cd.facilities
-  WHERE facid in (1, 5);
+SELECT *
+  FROM cd.facilities
+ WHERE facid in (1, 5);
 
 SELECT *
   FROM cd.facilities
@@ -43,9 +43,9 @@ SELECT *
 
  UNION ALL
 
- SELECT *
-   FROM cd.facilities
-  WHERE facid = 5;
+SELECT *
+  FROM cd.facilities
+ WHERE facid = 5;
 
 -- 7. Classify results into buckets
 
@@ -68,7 +68,7 @@ SELECT DISTINCT surname
 
  -- 10. Combining results from multiple queries
 
- SELECT surname
+SELECT surname
   FROM cd.members
 
  UNION
