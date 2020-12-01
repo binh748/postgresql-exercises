@@ -160,3 +160,111 @@ WITH rank_slots AS (
 SELECT facid, total
   FROM rank_slots
  WHERE "rank" = 1;
+
+-- 18. Rank members by (rounded) hours used
+
+SELECT m.firstname, m.surname, ROUND(SUM(slots * 0.5), -1) AS hours,
+       RANK() OVER(ORDER BY ROUND(SUM(slots * 0.5), -1) DESC) AS "rank"
+  FROM cd.members AS m
+  JOIN cd.bookings AS b
+ USING(memid)
+ GROUP BY 1, 2
+ ORDER BY "rank", 2, 1;
+
+-- 19. Find the top three revenue generating facilities
+
+WITH facility_revenue AS (
+  SELECT f.name, DENSE_RANK() OVER(ORDER BY SUM(CASE WHEN b.memid = 0 THEN f.guestcost * b.slots
+				                                             ELSE f.membercost * b.slots END) DESC) AS "rank"
+    FROM cd.bookings AS b
+    JOIN cd.facilities AS f
+   USING(facid)
+   GROUP BY 1
+)
+
+SELECT name, "rank"
+  FROM facility_revenue
+ WHERE "rank" IN (1, 2, 3)
+ ORDER BY "rank", name;
+
+-- 20. Classify facilities by value
+
+WITH facility_revenue_thirds AS (
+  SELECT f.name, NTILE(3) OVER(ORDER BY SUM(CASE WHEN b.memid = 0 THEN f.guestcost * b.slots
+                                                 ELSE f.membercost * b.slots END) DESC) AS thirds
+    FROM cd.bookings AS b
+    JOIN cd.facilities AS f
+   USING(facid)
+   GROUP BY 1
+)
+
+SELECT name, CASE WHEN thirds = 1 THEN 'high'
+                  WHEN thirds = 2 THEN 'average'
+				  ELSE 'low' END AS revenue
+ FROM facility_revenue_thirds
+ORDER BY thirds, name;
+
+-- 21. Calculate the payback time for each facility
+
+-- Because I linked the two tables together, I get a facility row for
+-- each of the bookings, so when I sum initialoutlay and monthlymaintenance, I'm summing them up
+-- multiple times for each booking, which is wrong. Beware of this!
+
+-- If I don't include the column in the aggregate function, it won't be aggregated, so that's
+-- how I can operate on aggregated columns and non-aggregated columns. But this only works
+-- if I do GROUP BY facid (the table's primary key), which is a weird quirk to me. Not sure
+-- why that works.
+
+WITH initial_outlay AS (
+  SELECT name, initialoutlay AS cost
+    FROM cd.facilities
+),
+monthly_avg_profit AS (
+  SELECT f.name, (SUM(CASE WHEN b.memid = 0 THEN f.guestcost * b.slots
+                           ELSE f.membercost * b.slots END) / 3 - f.monthlymaintenance) AS profit
+    FROM cd.bookings AS b
+    JOIN cd.facilities AS f
+   USING(facid)
+   GROUP BY f.facid
+)
+
+SELECT i.name, i.cost / m.profit AS months
+  FROM initial_outlay AS i
+  JOIN monthly_avg_profit AS m
+ USING(name)
+ ORDER BY 1;
+
+-- 22. Calculate a rolling average of total revenue
+
+-- Remember that a 15-day rolling average includes the current row,
+-- hence why 14 PRECEDING instead of 15
+
+-- Aggregations work in the OVER() clause, but not the aggregate function itself
+-- For example, AVG(revenue) is going to compute the AVG revenue per booking without
+-- any aggregation, whereas I want to compute the rolling average of daily revenue
+
+-- Don't need to do COALESCE with AVG(d.revenue) because null values will be counted as 0
+-- when I do the averaging
+
+WITH all_dates AS (
+  SELECT CAST(GENERATE_SERIES('2012-07-01'::timestamp, '2012-08-31', '1 day') AS date) AS date
+),
+daily_revenue AS (
+  SELECT CAST(b.starttime AS date), SUM(CASE WHEN b.memid = 0 THEN f.guestcost * b.slots
+                                             ELSE f.membercost * b.slots END) AS revenue
+    FROM cd.bookings AS b
+    JOIN cd.facilities AS f
+   USING(facid)
+   GROUP BY 1
+),
+rolling_revenue AS (SELECT a.date, AVG(d.revenue)
+                                  OVER(ORDER BY a.date ASC
+											                 ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS revenue
+                      FROM all_dates AS a
+				              LEFT JOIN daily_revenue AS d
+                        ON a.date = d.starttime
+)
+SELECT date, revenue
+  FROM rolling_revenue
+ WHERE date BETWEEN '2012-08-01' AND '2012-08-31'
+ ORDER BY 1;
