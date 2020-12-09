@@ -38,3 +38,20 @@ SELECT memid, telephone
 SELECT LPAD(zipcode::char(5), 5, '0') AS zip
   FROM cd.members
  ORDER BY zip;
+
+-- 6. Count the number of members whose surname starts with each letter of the alphabet
+
+SELECT LEFT(surname, 1) AS letter, COUNT(*)
+  FROM cd.members
+ GROUP BY 1
+ ORDER BY 1;
+
+-- 7. Clean up telephone numbers
+
+SELECT memid, REGEXP_REPLACE(telephone, '[()\- ]', '', 'g') AS telephone
+  FROM cd.members
+ ORDER BY 1;
+
+ SELECT memid, REGEXP_REPLACE(telephone, '[^0-9]', '', 'g') AS telephone
+   FROM cd.members
+  ORDER BY 1;
